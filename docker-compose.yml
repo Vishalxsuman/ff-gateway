@@ -1,0 +1,52 @@
+version: "3.9"
+
+services:
+  ff-gateway:
+    build:
+      context: .
+      target: production
+    image: ff-gateway:local
+    container_name: ff-gateway
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8000}:${PORT:-8000}"
+    environment:
+      # ── Required ────────────────────────────────────────────
+      FF_GUEST_UID: "${FF_GUEST_UID}"
+      FF_GUEST_PASSWORD: "${FF_GUEST_PASSWORD}"
+      # ── Protocol ────────────────────────────────────────────
+      FF_OB_VERSION: "${FF_OB_VERSION:-OB55}"
+      FF_FULL_BUILD_STRING: "${FF_FULL_BUILD_STRING:-}"
+      AES_KEY: "${AES_KEY:-Yg&tc%DEuh6%Zc^8}"
+      AES_IV: "${AES_IV:-6oyZDr22E3ychjM%}"
+      SERVICE_MSG_PLAYER_SHOW: "${SERVICE_MSG_PLAYER_SHOW:-179}"
+      # ── Server ──────────────────────────────────────────────
+      PORT: "${PORT:-8000}"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+      # ── Cache ───────────────────────────────────────────────
+      REDIS_URL: "${REDIS_URL:-}"
+      ENABLE_CACHE: "${ENABLE_CACHE:-true}"
+      CACHE_TTL_SECONDS: "${CACHE_TTL_SECONDS:-300}"
+      # ── Features ────────────────────────────────────────────
+      ENABLE_RATE_LIMIT: "${ENABLE_RATE_LIMIT:-true}"
+      RATE_LIMIT_PER_UID: "${RATE_LIMIT_PER_UID:-10}"
+      CORS_ORIGINS: "${CORS_ORIGINS:-*}"
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request, os; urllib.request.urlopen(f'http://localhost:{os.getenv(\"PORT\",\"8000\")}/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # Optional: local Redis for cache testing
+  redis:
+    image: redis:7-alpine
+    container_name: ff-gateway-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    profiles:
+      - redis

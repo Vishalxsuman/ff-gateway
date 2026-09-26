@@ -1,0 +1,115 @@
+# Azure Pipelines — alternative to GitHub Actions
+# Suitable for Azure DevOps users.
+
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - ff-gateway/*
+
+variables:
+  acrRegistry: $(ACR_REGISTRY)       # e.g. myregistry.azurecr.io
+  imageName: ff-gateway
+  appName: $(AZURE_APP_NAME)
+  pythonVersion: "3.11"
+
+stages:
+  # ──────────────────────────────────────────────────────────────────────────
+  - stage: Test
+    displayName: Run Tests
+    jobs:
+      - job: PytestJob
+        displayName: pytest + coverage
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
+
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: "$(pythonVersion)"
+            displayName: Set up Python
+
+          - script: |
+              cd ff-gateway
+              pip install -r requirements.txt -r requirements-dev.txt
+            displayName: Install dependencies
+
+          - script: |
+              cd ff-gateway
+              pytest tests/ --cov=src --cov-report=xml --cov-fail-under=80 -v
+            displayName: Run tests
+            env:
+              FF_GUEST_UID: "1948201948"
+              FF_GUEST_PASSWORD: "ci_placeholder"
+              FF_OB_VERSION: "OB55"
+              AES_KEY: "Yg&tc%DEuh6%Zc^8"
+              AES_IV: "6oyZDr22E3ychjM%"
+              ENABLE_CACHE: "false"
+              ENABLE_RATE_LIMIT: "false"
+              LOG_LEVEL: "WARNING"
+
+          - task: PublishCodeCoverageResults@1
+            inputs:
+              codeCoverageTool: Cobertura
+              summaryFileLocation: ff-gateway/coverage.xml
+
+  # ──────────────────────────────────────────────────────────────────────────
+  - stage: Build
+    displayName: Build & Push Docker Image
+    dependsOn: Test
+    jobs:
+      - job: DockerBuildPush
+        displayName: Docker build → ACR push
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
+
+          - task: Docker@2
+            displayName: Login to ACR
+            inputs:
+              command: login
+              containerRegistry: $(ACR_SERVICE_CONNECTION)
+
+          - task: Docker@2
+            displayName: Build and push
+            inputs:
+              command: buildAndPush
+              repository: $(imageName)
+              dockerfile: ff-gateway/Dockerfile
+              containerRegistry: $(ACR_SERVICE_CONNECTION)
+              tags: |
+                latest
+                $(Build.SourceVersion)
+
+  # ──────────────────────────────────────────────────────────────────────────
+  - stage: Deploy
+    displayName: Deploy to Azure App Service
+    dependsOn: Build
+    jobs:
+      - deployment: DeployToAzure
+        displayName: Deploy container
+        environment: production
+        pool:
+          vmImage: ubuntu-latest
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: AzureWebAppContainer@1
+                  displayName: Deploy to App Service
+                  inputs:
+                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                    appName: $(appName)
+                    containers: $(acrRegistry)/$(imageName):$(Build.SourceVersion)
+
+                - script: |
+                    sleep 30
+                    STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+                      https://$(appName).azurewebsites.net/health)
+                    echo "Health: $STATUS"
+                    [ "$STATUS" = "200" ] || [ "$STATUS" = "503" ] || exit 1
+                  displayName: Smoke test /health

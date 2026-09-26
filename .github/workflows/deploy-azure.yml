@@ -90,11 +90,14 @@ jobs:
 
     steps:
       - name: Deploy container to App Service
-        uses: azure/webapps-deploy@v3
-        with:
-          app-name: ${{ env.APP_NAME }}
-          publish-profile: ${{ secrets.AZURE_CREDENTIALS }}
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+        run: |
+          USER_NAME=$(echo '${{ secrets.AZURE_CREDENTIALS }}' | grep -o 'userName="[^"]*"' | head -1 | cut -d'"' -f2)
+          USER_PWD=$(echo '${{ secrets.AZURE_CREDENTIALS }}' | grep -o 'userPWD="[^"]*"' | head -1 | cut -d'"' -f2)
+          APP_HOST="${{ env.APP_NAME }}.scm.azurewebsites.net"
+          
+          echo "Triggering Azure Container Deployment for ${{ env.APP_NAME }}..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -u "$USER_NAME:$USER_PWD" -X POST "https://$APP_HOST/api/container/deploy")
+          echo "Container deployment trigger returned HTTP $STATUS"
 
       - name: Verify health endpoint
         run: |

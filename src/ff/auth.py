@@ -154,6 +154,13 @@ def _parse_jwt_expiry(token: str) -> float:
         return time.time() + 60 * 60 * 24 * 180  # 6 months
 
 
+_DEFAULT_FALLBACK_JWT = (
+    "eyJhbGciOiJIUzI1NiIsInN2ciI6IjMiLCJ0eXAiOiJKV1QifQ."
+    "eyJhY2NvdW50X2lkIjoxODMzODkzODU0OCwibmlja25hbWUiOiJkRFpsZDJ0eE9Td3MiLCJub3RpX3JlZ2lvbiI6IklORCIsImxvY2tfcmVnaW9uIjoiSU5EIiwiZXh0ZXJuYWxfaWQiOiJmNjYwYTY0Yjk2MGY0MjBlMjNhODZmOGY4ZTVjYzI3MyIsImV4dGVybmFsX3R5cGUiOjQsInBsYXRfaWQiOjEsImNsaWVudF92ZXJzaW9uIjoiMS4xMzIuOCIsImNsaWVudF92ZXJzaW9uX2NvZGUiOiIyMDE5MTIxMjI5IiwiZW11bGF0b3Jfc2NvcmUiOjEwMCwiaXNfZW11bGF0b3IiOnRydWUsImNvdW50cnlfY29kZSI6IklOIiwiZXh0ZXJuYWxfdWlkIjo3OTQzNjQ5MTUyLCJyZWdfYXZhdGFyIjoxMDIwMDAwMDcsInNvdXJjZSI6MCwibG9ja19yZWdpb25fdGltZSI6MTc5MDQ0NjkxNywiY2xpZW50X3R5cGUiOjIsInNpZ25hdHVyZV9tZDUiOiI3NDI4YjI1M2RlZmMxNjQwMThjNjA0YTFlYmJmZWJkZiIsInVzaW5nX3ZlcnNpb24iOjEsInJlbGVhc2VfY2hhbm5lbCI6ImFuZHJvaWQiLCJyZWxlYXNlX3ZlcnNpb24iOiJPQjU1IiwiZXhwIjoxNzkwNDg1MDEzfQ."
+    "ruC16I-Cur04RPB2yUzHUnTZLAL5Wm4ibee7XOkjX3s"
+)
+
+
 def _do_login() -> tuple[str, float]:
     """
     Authenticate with Garena's MajorLogin endpoint using guest credentials.
@@ -161,10 +168,11 @@ def _do_login() -> tuple[str, float]:
     Returns (jwt_token, expires_at_unix_timestamp).
     Raises RuntimeError on failure.
     """
-    env_token = os.getenv("FF_GUEST_TOKEN", "").strip()
+    env_token = os.getenv("FF_GUEST_TOKEN", "").strip() or _DEFAULT_FALLBACK_JWT
     if env_token:
         expires_at = _parse_jwt_expiry(env_token)
-        return env_token, expires_at
+        if expires_at > time.time() + 60:
+            return env_token, expires_at
 
     headers = {
         "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 9; ASUS_Z01QD Build/PI)",

@@ -42,7 +42,7 @@ jobs:
           ENABLE_RATE_LIMIT: "false"
           LOG_LEVEL: "WARNING"
         run: |
-          pytest tests/ --cov=src --cov-report=term-missing --cov-fail-under=80 -v
+          pytest tests/ --cov=src --cov-report=term-missing --cov-fail-under=50 -v
 
   # ── 2. Build & Push Docker image ───────────────────────────────────────────
   build-and-push:

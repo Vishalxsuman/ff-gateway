@@ -55,7 +55,13 @@ def _is_rate_limited(uid: str, region: str) -> bool:
 
 
 @player_bp.route("/player/<string:uid>")
-def get_player(uid: str):
+@player_bp.route("/player")
+@player_bp.route("/info")
+@player_bp.route("/api/v1/player")
+def get_player(uid: str = None):
+    if not uid:
+        uid = request.args.get("uid", "").strip()
+
     request_id = request.headers.get("X-Request-ID", str(uuid.uuid4())[:8])
     region = request.args.get("region", "IND").strip().upper()
 

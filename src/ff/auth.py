@@ -161,6 +161,11 @@ def _do_login() -> tuple[str, float]:
     Returns (jwt_token, expires_at_unix_timestamp).
     Raises RuntimeError on failure.
     """
+    env_token = os.getenv("FF_GUEST_TOKEN", "").strip()
+    if env_token:
+        expires_at = _parse_jwt_expiry(env_token)
+        return env_token, expires_at
+
     headers = {
         "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 9; ASUS_Z01QD Build/PI)",
         "Content-Type": "application/x-www-form-urlencoded",

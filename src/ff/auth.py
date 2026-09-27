@@ -371,11 +371,9 @@ def update_token(token: str) -> dict:
 
     # Automatically reset circuit breakers for all regions
     try:
-        from src.ff.regions import SUPPORTED_REGION_CODES
         from src.utils.retry import circuit_breaker
 
-        for r in SUPPORTED_REGION_CODES:
-            circuit_breaker.reset(f"garena:{r}")
+        circuit_breaker.reset_all()
         log.info("Reset all circuit breakers after dynamic token update")
     except Exception as exc:
         log.warning("Could not reset circuit breakers: %s", exc)

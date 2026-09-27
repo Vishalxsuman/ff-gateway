@@ -71,9 +71,21 @@ class CircuitBreaker:
             else:
                 self._circuits[key] = (state, count, opened_at)
 
+    def reset(self, key: str) -> None:
+        with self._lock:
+            self._circuits[key] = (self.CLOSED, 0, 0.0)
+
+    def reset_all(self) -> None:
+        with self._lock:
+            self._circuits.clear()
+
     def state(self, key: str) -> str:
         with self._lock:
-            return self._get(key)[0]
+            state, count, opened_at = self._get(key)
+            if state == self.OPEN and time.monotonic() - opened_at >= self._reset_seconds:
+                self._circuits[key] = (self.HALF_OPEN, count, opened_at)
+                return self.HALF_OPEN
+            return state
 
 
 # Shared circuit breaker instance (per-region key)

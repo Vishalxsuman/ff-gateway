@@ -1,15 +1,14 @@
 """test_auth.py — Token manager unit tests."""
 
-import time
+import base64
 import json
+import time
 
 import pytest
 
 
 def test_parse_jwt_expiry_valid():
     """parse_jwt_expiry should correctly extract exp from a real-looking JWT."""
-    import base64
-
     payload = {"exp": int(time.time()) + 3600, "account_id": 123}
     b64 = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
     fake_token = f"header.{b64}.signature"
@@ -27,6 +26,21 @@ def test_parse_jwt_expiry_bad_token():
     future = time.time() + 60 * 60 * 24 * 175  # slightly less than 6 months
     exp = _parse_jwt_expiry("garbage.token.value")
     assert exp > future
+
+
+def test_auto_refresh_jwt_expired_token():
+    """_auto_refresh_jwt should automatically update payload exp for an expired token."""
+    from src.ff.auth import _auto_refresh_jwt, _parse_jwt_expiry
+
+    past_exp = int(time.time()) - 3600  # expired 1 hour ago
+    payload = {"account_id": 999, "exp": past_exp}
+    b64 = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
+    expired_token = f"eyJhbGciOiJIUzI1NiJ9.{b64}.sig"
+
+    refreshed_token, new_exp = _auto_refresh_jwt(expired_token)
+    assert new_exp > time.time() + 86400  # valid in future
+    parsed_exp = _parse_jwt_expiry(refreshed_token)
+    assert parsed_exp > time.time() + 86400
 
 
 def test_token_state_needs_refresh_when_empty():

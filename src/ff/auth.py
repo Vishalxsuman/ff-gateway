@@ -79,7 +79,9 @@ class _TokenState:
         with self._lock:
             if not self.token:
                 return True
-            return (self.expires_at - time.time()) < config.token_refresh_buffer_seconds
+            # Trigger refresh if less than 1 hour (3600 seconds) remains before expiration
+            remaining = self.expires_at - time.time()
+            return remaining < max(3600.0, float(config.token_refresh_buffer_seconds))
 
     def health_status(self) -> str:
         with self._lock:
@@ -195,27 +197,35 @@ def _do_garena_oauth_grant() -> Optional[dict]:
         "client_secret": "2ee44819e9b4598845141067b281621874d0d5d7af9d8f7e00c1e54715b7d1e3",
     }
 
-    try:
-        resp = requests.post(url, headers=headers, data=data, timeout=10)
-        if resp.status_code == 200:
-            res_json = resp.json()
-            log.info(
-                "Garena OAuth grant successful for UID %s (open_id: %s..., expires_in: %s s)",
-                uid,
-                str(res_json.get("open_id", ""))[:8],
-                res_json.get("expires_in"),
-            )
-            return res_json
-        else:
-            log.warning("Garena OAuth grant returned HTTP %d: %s", resp.status_code, resp.text[:100])
-    except Exception as exc:
-        log.warning("Garena OAuth grant failed: %s", exc)
+    # Retry up to 3 attempts with exponential backoff (2s, 4s, 8s)
+    for attempt in range(1, 4):
+        try:
+            resp = requests.post(url, headers=headers, data=data, timeout=10)
+            if resp.status_code == 200:
+                res_json = resp.json()
+                log.info(
+                    "Garena OAuth grant successful for UID %s (open_id: %s..., expires_in: %s s)",
+                    uid,
+                    str(res_json.get("open_id", ""))[:8],
+                    res_json.get("expires_in"),
+                )
+                return res_json
+            elif resp.status_code in (401, 403):
+                log.error("Garena OAuth grant credentials rejected (HTTP %d): %s. Human intervention required.", resp.status_code, resp.text[:100])
+                break
+            else:
+                log.warning("Garena OAuth grant attempt %d returned HTTP %d: %s", attempt, resp.status_code, resp.text[:100])
+        except Exception as exc:
+            log.warning("Garena OAuth grant attempt %d failed: %s", attempt, exc)
+        time.sleep(2 ** attempt)
+
     return None
 
 
 def _do_garena_major_login(open_id: str, access_token: str) -> Optional[tuple[str, float]]:
     """
     Exchanges Garena OAuth open_id & access_token for Garena session JWT via MajorLogin.
+    Uses exponential backoff retry.
     """
     url = _GARENA_LOGIN_URL
     headers = {
@@ -228,20 +238,24 @@ def _do_garena_major_login(open_id: str, access_token: str) -> Optional[tuple[st
         "platform": 1,
         "app_id": 100067,
     }
-    try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=10)
-        if resp.status_code == 200:
-            res_json = resp.json()
-            token = res_json.get("token") or res_json.get("jwt") or res_json.get("access_token")
-            if token and token.startswith("eyJ"):
-                expires_at = _parse_jwt_expiry(token)
-                log.info(
-                    "Garena MajorLogin generated fresh game session JWT (expires in %.1f hours)",
-                    (expires_at - time.time()) / 3600,
-                )
-                return token, expires_at
-    except Exception as exc:
-        log.warning("Garena MajorLogin request failed: %s", exc)
+    for attempt in range(1, 4):
+        try:
+            resp = requests.post(url, headers=headers, json=payload, timeout=10)
+            if resp.status_code == 200:
+                res_json = resp.json()
+                token = res_json.get("token") or res_json.get("jwt") or res_json.get("access_token")
+                if token and token.startswith("eyJ"):
+                    expires_at = _parse_jwt_expiry(token)
+                    log.info(
+                        "Garena MajorLogin generated fresh game session JWT (expires in %.1f hours)",
+                        (expires_at - time.time()) / 3600,
+                    )
+                    return token, expires_at
+            log.warning("Garena MajorLogin attempt %d returned HTTP %d: %s", attempt, resp.status_code, resp.text[:100])
+        except Exception as exc:
+            log.warning("Garena MajorLogin attempt %d failed: %s", attempt, exc)
+        time.sleep(2 ** attempt)
+
     return None
 
 

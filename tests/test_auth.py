@@ -47,7 +47,7 @@ def test_token_state_healthy_after_set():
     from src.ff.auth import _TokenState
 
     state = _TokenState()
-    state.set("mytoken", time.time() + 3600)
+    state.set("mytoken", time.time() + 7200)
     assert state.health_status() == "healthy"
     assert state.needs_refresh() is False
     assert state.get_token() == "mytoken"

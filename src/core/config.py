@@ -54,8 +54,25 @@ class GatewayConfig:
 
 
 def _require(key: str) -> str:
-    """Read a required ENV variable; terminate with a clear message if absent."""
+    """Read a required ENV variable; check local .env if absent."""
     value = os.getenv(key, "").strip()
+    if not value:
+        from pathlib import Path
+
+        for env_path in [Path(".env"), Path(__file__).resolve().parent.parent.parent / ".env"]:
+            if env_path.exists():
+                try:
+                    for line in env_path.read_text(encoding="utf-8").splitlines():
+                        line = line.strip()
+                        if line.startswith(f"{key}=") and not line.startswith("#"):
+                            value = line.split("=", 1)[1].strip()
+                            if value:
+                                break
+                except Exception:
+                    pass
+            if value:
+                break
+
     if not value:
         print(
             f"[FATAL] Required environment variable '{key}' is not set. "

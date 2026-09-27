@@ -67,7 +67,15 @@ def get_player(uid: str = None):
 
     set_request_context(request_id=request_id, uid=uid, region=region)
 
-    # ── Validate UID ──────────────────────────────────────────────────────────
+    # ── Ingest custom Authorization Bearer token if passed by client ─────────
+    auth_header = request.headers.get("Authorization", "").strip()
+    if auth_header.startswith("Bearer "):
+        user_jwt = auth_header[7:].strip()
+        if user_jwt and user_jwt.startswith("eyJ"):
+            try:
+                auth.update_token(user_jwt)
+            except Exception as exc:
+                log.warning("Could not auto-update token from Authorization header: %s", exc)
     if not uid.isdigit() or not (5 <= len(uid) <= 16):
         return (
             jsonify(

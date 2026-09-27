@@ -26,9 +26,11 @@ from src.core.logger import get_logger
 
 log = get_logger(__name__)
 
+import tempfile
+
 # ── Constants ─────────────────────────────────────────────────────────────────
 
-_TOKEN_CACHE_FILE = Path("/tmp/ff_token_cache.json")
+_TOKEN_CACHE_FILE = Path(tempfile.gettempdir()) / "ff_token_cache.json"
 _GARENA_LOGIN_URL = "https://loginbp.ggpolarbear.com/MajorLogin"
 _CHECK_INTERVAL_SECONDS = 60  # how often the background thread checks expiry
 
@@ -176,8 +178,8 @@ def _do_garena_oauth_grant() -> Optional[dict]:
     Perform OAuth guest token grant with Garena MSDK server using guest UID & password.
     Returns response dict containing access_token, open_id, and expiry info.
     """
-    uid = os.getenv("FF_GUEST_UID", "").strip()
-    password = os.getenv("FF_GUEST_PASSWORD", "").strip()
+    uid = (os.getenv("FF_GUEST_UID") or getattr(config, "ff_guest_uid", "")).strip()
+    password = (os.getenv("FF_GUEST_PASSWORD") or getattr(config, "ff_guest_password", "")).strip()
 
     if not uid or not password:
         log.warning("FF_GUEST_UID / FF_GUEST_PASSWORD not configured — skipping Garena OAuth grant check")

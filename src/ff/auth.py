@@ -421,40 +421,11 @@ def _background_refresh_loop() -> None:
 def initialize() -> None:
     """
     Called once at startup:
-      1. Try ENV-injected token (FF_GUEST_TOKEN).
-      2. Try token cache file.
-      3. Perform fresh login / JWT auto-refresh if neither is valid.
-      4. Start background refresh thread.
+      1. Perform fresh login & JWT auto-refresh via _refresh_token().
+      2. Start background refresh daemon thread.
     """
-    # Option 1: ENV token
-    env_token = os.getenv("FF_GUEST_TOKEN", "").strip()
-    if env_token:
-        expires_at = _parse_jwt_expiry(env_token)
-        if expires_at <= time.time() + 60:
-            env_token, expires_at = _auto_refresh_jwt(env_token)
-        _state.set(env_token, expires_at)
-        log.info(
-            "Using FF_GUEST_TOKEN from ENV (auto-refreshed exp, valid for %.0f hours)",
-            (expires_at - time.time()) / 3600,
-        )
-
-    # Option 2: cached token
-    if not _state.get_token():
-        cached = _load_token_cache()
-        if cached:
-            token, expires_at = cached
-            if expires_at <= time.time() + 60:
-                token, expires_at = _auto_refresh_jwt(token)
-            _state.set(token, expires_at)
-            log.info(
-                "Loaded cached token (valid for %.0f hours)",
-                (expires_at - time.time()) / 3600,
-            )
-
-    # Option 3: fresh login / JWT auto-refresh
-    if not _state.get_token():
-        log.info("Initializing Garena login & token manager")
-        _refresh_token()
+    log.info("Initializing Garena login & token manager")
+    _refresh_token()
 
     # Start background refresh daemon thread
     thread = threading.Thread(

@@ -161,14 +161,63 @@ _DEFAULT_FALLBACK_JWT = (
 )
 
 
+def _do_garena_oauth_grant() -> Optional[dict]:
+    """
+    Perform OAuth guest token grant with Garena MSDK server using guest UID & password.
+    Returns response dict containing access_token, open_id, and expiry info.
+    """
+    uid = os.getenv("FF_GUEST_UID", "").strip()
+    password = os.getenv("FF_GUEST_PASSWORD", "").strip()
+
+    if not uid or not password:
+        log.warning("FF_GUEST_UID / FF_GUEST_PASSWORD not configured — skipping Garena OAuth grant check")
+        return None
+
+    url = "https://ffmconnect.live.gop.garenanow.com/oauth/guest/token/grant"
+    headers = {
+        "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 9; ASUS_Z01QD Build/PI)",
+        "Content-Type": "application/x-www-form-urlencoded",
+    }
+    data = {
+        "uid": uid,
+        "password": password,
+        "response_type": "token",
+        "client_type": "2",
+        "client_id": "100067",
+        "client_secret": "2ee44819e9b4598845141067b281621874d0d5d7af9d8f7e00c1e54715b7d1e3",
+    }
+
+    try:
+        resp = requests.post(url, headers=headers, data=data, timeout=10)
+        if resp.status_code == 200:
+            res_json = resp.json()
+            log.info(
+                "Garena OAuth grant successful for UID %s (open_id: %s..., expires_in: %s s)",
+                uid,
+                res_json.get("open_id", "")[:8],
+                res_json.get("expires_in"),
+            )
+            return res_json
+        else:
+            log.warning("Garena OAuth grant returned HTTP %d: %s", resp.status_code, resp.text[:100])
+    except Exception as exc:
+        log.warning("Garena OAuth grant failed: %s", exc)
+    return None
+
+
 def _do_login() -> tuple[str, float]:
     """
     Selects a valid unexpired Garena session JWT from candidate tokens
-    (FF_GUEST_TOKENS pool, FF_GUEST_TOKEN, or fallback).
+    (FF_GUEST_TOKENS pool, FF_GUEST_TOKEN, cache, or fallback), while verifying
+    Garena OAuth connectivity.
     
     Returns (jwt_token, expires_at_unix_timestamp).
     Raises RuntimeError on failure.
     """
+    # 1. Verify Garena OAuth guest account connectivity
+    _do_garena_oauth_grant()
+
+    # 2. Collect candidate tokens
     raw_pool = os.getenv("FF_GUEST_TOKENS", "")
     candidate_tokens = [t.strip() for t in raw_pool.split(",") if t.strip()]
     
@@ -189,7 +238,9 @@ def _do_login() -> tuple[str, float]:
             best_expires = exp
 
     if best_token and best_expires > time.time() + 60:
-        log.info("Active session JWT selected — valid for %.1f hours", (best_expires - time.time()) / 3600)
+        log.info("Active Garena session JWT selected — valid for %.1f hours (expires at %s)",
+                 (best_expires - time.time()) / 3600,
+                 datetime.fromtimestamp(best_expires, tz=timezone.utc).isoformat())
         return best_token, best_expires
 
     raise RuntimeError("No valid unexpired Garena session JWT available.")

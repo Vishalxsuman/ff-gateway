@@ -46,3 +46,23 @@ def health():
         "circuit_breakers": cb_states,
     }
     return jsonify(payload), http_status
+
+
+@health_bp.route("/token/update", methods=["POST"])
+@health_bp.route("/admin/token", methods=["POST"])
+def update_token_route():
+    from flask import request
+    data = request.get_json(silent=True) or {}
+    token = data.get("token") or request.form.get("token") or ""
+
+    if not token:
+        return jsonify({"success": False, "error": "Missing 'token' in request body"}), 400
+
+    try:
+        res = auth.update_token(token)
+        return jsonify(res), 200
+    except ValueError as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"success": False, "error": f"Failed to update token: {exc}"}), 500
+

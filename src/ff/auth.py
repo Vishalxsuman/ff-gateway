@@ -163,67 +163,40 @@ _DEFAULT_FALLBACK_JWT = (
 
 def _do_login() -> tuple[str, float]:
     """
-    Authenticate with Garena's MajorLogin endpoint using guest credentials.
-
+    Selects a valid unexpired Garena session JWT from candidate tokens
+    (FF_GUEST_TOKENS pool, FF_GUEST_TOKEN, or fallback).
+    
     Returns (jwt_token, expires_at_unix_timestamp).
     Raises RuntimeError on failure.
     """
-    env_token = os.getenv("FF_GUEST_TOKEN", "").strip() or _DEFAULT_FALLBACK_JWT
-    if env_token:
-        expires_at = _parse_jwt_expiry(env_token)
-        if expires_at > time.time() + 60:
-            return env_token, expires_at
+    raw_pool = os.getenv("FF_GUEST_TOKENS", "")
+    candidate_tokens = [t.strip() for t in raw_pool.split(",") if t.strip()]
+    
+    single_env = os.getenv("FF_GUEST_TOKEN", "").strip()
+    if single_env:
+        candidate_tokens.append(single_env)
+    candidate_tokens.append(_DEFAULT_FALLBACK_JWT)
 
-    headers = {
-        "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 9; ASUS_Z01QD Build/PI)",
-        "Content-Type": "application/x-www-form-urlencoded",
-        "X-Unity-Version": "2018.4.11f1",
-        "ReleaseVersion": config.ff_ob_version,
-        "X-GA": "v1 1",
-        "Connection": "Keep-Alive",
-    }
+    best_token = ""
+    best_expires = 0.0
 
-    # Garena guest login payload
-    payload = {
-        "uid": config.ff_guest_uid,
-        "password": config.ff_guest_password,
-        "client_type": "2",
-        "plat_id": "1",
-    }
+    for token in candidate_tokens:
+        if not token.startswith("eyJ"):
+            continue
+        exp = _parse_jwt_expiry(token)
+        if exp > time.time() + 60 and exp > best_expires:
+            best_token = token
+            best_expires = exp
 
-    response = requests.post(
-        _GARENA_LOGIN_URL,
-        headers=headers,
-        data=payload,
-        timeout=15,
-    )
+    if best_token and best_expires > time.time() + 60:
+        log.info("Active session JWT selected — valid for %.1f hours", (best_expires - time.time()) / 3600)
+        return best_token, best_expires
 
-    if response.status_code != 200:
-        raise RuntimeError(
-            f"Garena MajorLogin returned HTTP {response.status_code}: {response.text[:200]}"
-        )
-
-    data = response.json()
-    token = data.get("token") or data.get("data", {}).get("token", "")
-    if not token:
-        # Some Garena responses nest the token differently
-        token = data.get("access_token", "")
-
-    if not token:
-        raise RuntimeError(
-            f"MajorLogin succeeded but no token found in response: {str(data)[:300]}"
-        )
-
-    expires_at = _parse_jwt_expiry(token)
-    log.info(
-        "Garena login succeeded — token valid for %.0f hours",
-        (expires_at - time.time()) / 3600,
-    )
-    return token, expires_at
+    raise RuntimeError("No valid unexpired Garena session JWT available.")
 
 
 def _refresh_token() -> None:
-    """Attempt login and update _state; record failure on exception."""
+    """Attempt token selection and update _state; record failure on exception."""
     log.info("Attempting Garena token refresh…")
     try:
         token, expires_at = _do_login()
@@ -241,6 +214,40 @@ def _refresh_token() -> None:
 def get_token() -> str:
     """Return the current valid JWT.  Never blocks; returns empty string if unavailable."""
     return _state.get_token()
+
+
+def update_token(token: str) -> dict:
+    """
+    Dynamically update the active Garena JWT token in memory + disk cache
+    without requiring a service restart. Also resets all circuit breakers.
+    """
+    token = token.strip()
+    if not token or not token.startswith("eyJ"):
+        raise ValueError("Invalid JWT token format. Must start with 'eyJ'")
+
+    expires_at = _parse_jwt_expiry(token)
+    if expires_at <= time.time() + 60:
+        raise ValueError(f"Provided token is already expired (exp timestamp: {expires_at})")
+
+    _state.set(token, expires_at)
+    _save_token_cache(token, expires_at)
+
+    # Automatically reset circuit breakers for all regions
+    try:
+        from src.utils.retry import circuit_breaker
+        from src.ff.regions import SUPPORTED_REGION_CODES
+        for r in SUPPORTED_REGION_CODES:
+            circuit_breaker.reset(f"garena:{r}")
+        log.info("Reset all circuit breakers after dynamic token update")
+    except Exception as exc:
+        log.warning("Could not reset circuit breakers: %s", exc)
+
+    log.info("Dynamic token update successful — valid for %.1f hours", (expires_at - time.time()) / 3600)
+    return {
+        "success": True,
+        "expires_at_iso": datetime.fromtimestamp(expires_at, tz=timezone.utc).isoformat(),
+        "expires_in_hours": round((expires_at - time.time()) / 3600, 2),
+    }
 
 
 def health_info() -> dict:

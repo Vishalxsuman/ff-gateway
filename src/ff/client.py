@@ -167,7 +167,10 @@ def _format_response(raw: dict[str, Any], uid: str, region: str) -> dict[str, An
     basic_info = {
         "nickname": basic.get("nickname", "Unknown"),
         "level": basic.get("level", 1),
+        "AccountLevel": basic.get("level", 1),
         "exp": basic.get("exp", 0),
+        "AccountExp": basic.get("exp", 0),
+        "AccountName": basic.get("nickname", "Unknown"),
         "likes": basic.get("liked", 0),
         "signature": social.get("social_highlight", ""),
         "avatar_id": avatar_id,

@@ -226,33 +226,76 @@ def _do_garena_oauth_grant() -> Optional[dict]:
 
 def _do_garena_major_login(open_id: str, access_token: str) -> Optional[tuple[str, float]]:
     """
-    Exchanges Garena OAuth open_id & access_token for Garena session JWT via MajorLogin.
-    Uses exponential backoff retry.
+    Exchanges Garena OAuth open_id & access_token for Garena session JWT via Protobuf MajorLogin.
+    Uses AES-128-CBC encrypted protobuf payload.
     """
     url = _GARENA_LOGIN_URL
     headers = {
-        "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 9; ASUS_Z01QD Build/PI)",
-        "Content-Type": "application/json",
+        "User-Agent": "UnityPlayer/2018.4.12f1 (UnityWebRequest/1.0, libcurl/8.5.0-DEV)",
+        "Content-Type": "application/octet-stream",
+        "X-Unity-Version": "2018.4.12f1",
+        "X-GA": "v1 1",
+        "X-GA-SV": "1790540006",
+        "ReleaseVersion": config.ff_ob_version,
+        "Authorization": f"Bearer {access_token}",
     }
-    payload = {
-        "open_id": open_id,
-        "access_token": access_token,
-        "platform": 1,
-        "app_id": 100067,
-    }
+
+    try:
+        import re
+        from Crypto.Cipher import AES
+        from Crypto.Util.Padding import pad
+        from src.ff.protobuf import my_pb2
+    except ImportError as exc:
+        log.warning("Crypto/protobuf module unavailable for MajorLogin: %s", exc)
+        return None
+
     for attempt in range(1, 4):
         try:
-            resp = requests.post(url, headers=headers, json=payload, timeout=10)
+            gd = my_pb2.GameData()
+            gd.timestamp = "2024-12-05 18:15:32"
+            gd.game_name = "free fire"
+            gd.game_version = 1
+            gd.version_code = "1.132.1"
+            gd.os_info = "Android OS 9 / API-28"
+            gd.device_type = "Handheld"
+            gd.network_provider = "Verizon"
+            gd.connection_type = "WIFI"
+            gd.screen_width = 1280
+            gd.screen_height = 960
+            gd.dpi = "240"
+            gd.cpu_info = "ARMv7"
+            gd.total_ram = 5951
+            gd.gpu_name = "Adreno 640"
+            gd.gpu_version = "OpenGL ES 3.0"
+            gd.user_id = "Google|74b585a9"
+            gd.ip_address = "172.190.111.97"
+            gd.language = "en"
+            gd.open_id = open_id
+            gd.access_token = access_token
+            gd.platform_type = 4
+            gd.field_99 = "4"
+            gd.field_100 = "4"
+
+            sdata = gd.SerializeToString()
+            cipher = AES.new(b"Yg&tc%DEuh6%Zc^8", AES.MODE_CBC, b"6oyZDr22E3ychjM%")
+            edata = cipher.encrypt(pad(sdata, 16))
+
+            resp = requests.post(url, headers=headers, data=edata, timeout=10)
             if resp.status_code == 200:
-                res_json = resp.json()
-                token = res_json.get("token") or res_json.get("jwt") or res_json.get("access_token")
-                if token and token.startswith("eyJ"):
-                    expires_at = _parse_jwt_expiry(token)
-                    log.info(
-                        "Garena MajorLogin generated fresh game session JWT (expires in %.1f hours)",
-                        (expires_at - time.time()) / 3600,
-                    )
-                    return token, expires_at
+                idx = resp.content.find(b"eyJ")
+                if idx != -1:
+                    jwt_raw = resp.content[idx:].decode("utf-8", errors="ignore")
+                    m = re.search(r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", jwt_raw)
+                    if m:
+                        token = m.group(0)
+                        expires_at = _parse_jwt_expiry(token)
+                        if expires_at <= 0:
+                            expires_at = time.time() + 86400
+                        log.info(
+                            "Garena MajorLogin generated fresh game session JWT (expires in %.1f hours)",
+                            (expires_at - time.time()) / 3600,
+                        )
+                        return token, expires_at
             log.warning("Garena MajorLogin attempt %d returned HTTP %d: %s", attempt, resp.status_code, resp.text[:100])
         except Exception as exc:
             log.warning("Garena MajorLogin attempt %d failed: %s", attempt, exc)

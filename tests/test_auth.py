@@ -20,27 +20,20 @@ def test_parse_jwt_expiry_valid():
 
 
 def test_parse_jwt_expiry_bad_token():
-    """parse_jwt_expiry should return ~6 months for garbage tokens."""
+    """parse_jwt_expiry should return 0.0 for garbage tokens."""
     from src.ff.auth import _parse_jwt_expiry
 
-    future = time.time() + 60 * 60 * 24 * 175  # slightly less than 6 months
     exp = _parse_jwt_expiry("garbage.token.value")
-    assert exp > future
+    assert exp == 0.0
 
 
-def test_auto_refresh_jwt_expired_token():
-    """_auto_refresh_jwt should automatically update payload exp for an expired token."""
-    from src.ff.auth import _auto_refresh_jwt, _parse_jwt_expiry
+def test_mark_token_invalid():
+    """mark_token_invalid should flag rejected tokens and prevent selection in pool."""
+    from src.ff.auth import mark_token_invalid, _invalid_tokens, _do_login
 
-    past_exp = int(time.time()) - 3600  # expired 1 hour ago
-    payload = {"account_id": 999, "exp": past_exp}
-    b64 = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
-    expired_token = f"eyJhbGciOiJIUzI1NiJ9.{b64}.sig"
-
-    refreshed_token, new_exp = _auto_refresh_jwt(expired_token)
-    assert new_exp > time.time() + 86400  # valid in future
-    parsed_exp = _parse_jwt_expiry(refreshed_token)
-    assert parsed_exp > time.time() + 86400
+    bad_token = "eyJhbGciOiJIUzI1NiJ9.eyJhY2NvdW50X2lkIjo5OTksImV4cCI6MjA0ODU1MjYyM30.sig"
+    mark_token_invalid(bad_token)
+    assert bad_token in _invalid_tokens
 
 
 def test_token_state_needs_refresh_when_empty():

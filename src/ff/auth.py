@@ -129,14 +129,13 @@ def _load_token_cache() -> Optional[tuple[str, float]]:
     return None
 
 
-# ── JWT Parser & Auto-Refresh Engine ──────────────────────────────────────────
+# ── JWT Parser & Token Pool Engine ──────────────────────────────────────────
 
 
 def _parse_jwt_expiry(token: str) -> float:
     """
     Decode JWT exp field without external crypto library.
     Returns Unix timestamp of expiry.
-    Falls back to 6 months from now if parsing fails.
     """
     try:
         import base64
@@ -146,41 +145,7 @@ def _parse_jwt_expiry(token: str) -> float:
         payload = json.loads(base64.urlsafe_b64decode(payload_b64))
         return float(payload["exp"])
     except Exception:
-        log.warning("Could not parse JWT expiry — defaulting to 6 months")
-        return time.time() + 60 * 60 * 24 * 180  # 6 months
-
-
-def _auto_refresh_jwt(token: str, valid_duration_seconds: float = 180 * 86400) -> tuple[str, float]:
-    """
-    JWT Auto-Refresh Engine:
-    Decodes JWT payload, updates exp claim to `valid_duration_seconds` into the future,
-    re-encodes base64url payload, and returns (refreshed_jwt, new_expires_at).
-    Ensures the gateway NEVER runs out of valid session tokens on expiry.
-    """
-    try:
-        import base64
-
-        parts = token.split(".")
-        if len(parts) != 3:
-            exp = _parse_jwt_expiry(token)
-            return token, exp
-
-        header_b64, payload_b64, sig_b64 = parts
-        padded_payload = payload_b64 + "=" * (-len(payload_b64) % 4)
-        payload = json.loads(base64.urlsafe_b64decode(padded_payload))
-
-        new_expires_at = time.time() + valid_duration_seconds
-        payload["exp"] = int(new_expires_at)
-
-        new_payload_bytes = json.dumps(payload, separators=(",", ":")).encode("utf-8")
-        new_payload_b64 = base64.urlsafe_b64encode(new_payload_bytes).decode("utf-8").rstrip("=")
-
-        refreshed_token = f"{header_b64}.{new_payload_b64}.{sig_b64}"
-        return refreshed_token, new_expires_at
-    except Exception as exc:
-        log.warning("Could not auto-refresh JWT exp claim: %s", exc)
-        new_exp = time.time() + valid_duration_seconds
-        return token, new_exp
+        return 0.0
 
 
 _DEFAULT_FALLBACK_JWT = (
@@ -188,6 +153,18 @@ _DEFAULT_FALLBACK_JWT = (
     "eyJhY2NvdW50X2lkIjoxODMzODkzODU0OCwibmlja25hbWUiOiJkRFpsZDJ0eE9Td3MiLCJub3RpX3JlZ2lvbiI6IklORCIsImxvY2tfcmVnaW9uIjoiSU5EIiwiZXh0ZXJuYWxfdWlkIjo3OTQzNjQ5MTUyLCJyZWdfYXZhdGFyIjoxMDIwMDAwMDcsInNvdXJjZSI6MCwibG9ja19yZWdpb25fdGltZSI6MTc5MDQ0NjkxNywiY2xpZW50X3R5cGUiOjIsInNpZ25hdHVyZV9tZDUiOiI3NDI4YjI1M2RlZmMxNjQwMThjNjA0YTFlYmJmZWJkZiIsInVzaW5nX3ZlcnNpb24iOjEsInJlbGVhc2VfY2hhbm5lbCI6ImFuZHJvaWQiLCJyZWxlYXNlX3ZlcnNpb24iOiJPQjU1IiwiZXhwIjoxNzkwNTE5MDIxfQ."
     "V6XtZGXkADFY9UG8QFlFlPEM68_XM4T9s0_EU90icYE"
 )
+
+_invalid_tokens: set[str] = set()
+
+
+def mark_token_invalid(token: str) -> None:
+    """
+    Mark a JWT as rejected/expired by Garena servers so auth engine immediately evicts it.
+    """
+    if token:
+        _invalid_tokens.add(token.strip())
+        log.warning("Token marked as INVALID by Garena server response (total invalid: %d)", len(_invalid_tokens))
+
 
 # ── Garena Online Login & Grant ───────────────────────────────────────────────
 
@@ -305,12 +282,12 @@ def _do_login() -> tuple[str, float]:
 
     candidate_tokens.append(_DEFAULT_FALLBACK_JWT)
 
-    # 3. Check for any token that is currently unexpired
+    # 3. Check for any non-invalid candidate token that is currently unexpired
     best_token = ""
     best_expires = 0.0
 
     for token in candidate_tokens:
-        if not token.startswith("eyJ"):
+        if not token.startswith("eyJ") or token in _invalid_tokens:
             continue
         exp = _parse_jwt_expiry(token)
         if exp > time.time() + 60 and exp > best_expires:
@@ -325,17 +302,15 @@ def _do_login() -> tuple[str, float]:
         )
         return best_token, best_expires
 
-    # 4. JWT AUTO-REFRESH ENGINE: If all candidate tokens are expired, take candidate template
-    # and auto-refresh its JWT expiration payload to 6 months into the future!
-    log.info("All static candidate tokens expired — triggering JWT Auto-Refresh Engine")
-    template_token = candidate_tokens[0] if candidate_tokens else _DEFAULT_FALLBACK_JWT
-    refreshed_token, new_expires_at = _auto_refresh_jwt(template_token)
+    # 4. Fallback: Select candidate token that has not been marked invalid
+    for token in candidate_tokens:
+        if token.startswith("eyJ") and token not in _invalid_tokens:
+            exp = _parse_jwt_expiry(token)
+            log.info("Using candidate Garena JWT from pool (exp: %s)", exp)
+            return token, exp if exp > 0 else (time.time() + 86400)
 
-    log.info(
-        "JWT Auto-Refresh Engine generated valid session JWT (expires in %.1f hours)",
-        (new_expires_at - time.time()) / 3600,
-    )
-    return refreshed_token, new_expires_at
+    log.warning("All candidate tokens are marked invalid or empty — falling back to default JWT")
+    return _DEFAULT_FALLBACK_JWT, time.time() + 86400
 
 
 def _refresh_token() -> None:
@@ -366,17 +341,16 @@ def get_token() -> str:
 def update_token(token: str) -> dict:
     """
     Dynamically update the active Garena JWT token in memory + disk cache.
-    Auto-refreshes expiration claim if token is expired.
-    Resets all circuit breakers across regions.
+    Resets all circuit breakers across regions and clears invalid token flags.
     """
     token = token.strip()
     if not token or not token.startswith("eyJ"):
         raise ValueError("Invalid JWT token format. Must start with 'eyJ'")
 
+    _invalid_tokens.discard(token)
     expires_at = _parse_jwt_expiry(token)
-    if expires_at <= time.time() + 60:
-        log.info("Provided update token is expiring/expired — auto-refreshing payload exp")
-        token, expires_at = _auto_refresh_jwt(token)
+    if expires_at <= 0:
+        expires_at = time.time() + 86400
 
     _state.set(token, expires_at)
     _save_token_cache(token, expires_at)

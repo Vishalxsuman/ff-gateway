@@ -26,10 +26,10 @@ def main():
     # 3. Call Garena API directly
     try:
         data = client.fetch_player(uid, region)
-        print("\n✅ LIVE TELEMETRY RETRIEVED SUCCESSFULLY FROM GARENA SERVER:\n")
+        print("\n[SUCCESS] LIVE TELEMETRY RETRIEVED SUCCESSFULLY FROM GARENA SERVER:\n")
         print(json.dumps(data, indent=2))
     except Exception as exc:
-        print(f"\n❌ Garena Request Error: {exc}")
+        print(f"\n[ERROR] Garena Request Error: {exc}")
 
 if __name__ == "__main__":
     main()

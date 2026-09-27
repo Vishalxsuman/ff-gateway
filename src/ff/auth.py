@@ -31,7 +31,7 @@ import tempfile
 # ── Constants ─────────────────────────────────────────────────────────────────
 
 _TOKEN_CACHE_FILE = Path(tempfile.gettempdir()) / "ff_token_cache.json"
-_GARENA_LOGIN_URL = "https://loginbp.ggpolarbear.com/MajorLogin"
+_GARENA_LOGIN_URL = "https://loginbp.ppmainecoonghj.com/MajorLogin"
 _CHECK_INTERVAL_SECONDS = 60  # how often the background thread checks expiry
 
 # ── Token state ───────────────────────────────────────────────────────────────
@@ -154,8 +154,8 @@ def _parse_jwt_expiry(token: str) -> float:
 
 _DEFAULT_FALLBACK_JWT = (
     "eyJhbGciOiJIUzI1NiIsInN2ciI6IjMiLCJ0eXAiOiJKV1QifQ."
-    "eyJhY2NvdW50X2lkIjoxODMzODkzODU0OCwibmlja25hbWUiOiJkRFpsZDJ0eE9Td3MiLCJub3RpX3JlZ2lvbiI6IklORCIsImxvY2tfcmVnaW9uIjoiSU5EIiwiZXh0ZXJuYWxfdWlkIjo3OTQzNjQ5MTUyLCJyZWdfYXZhdGFyIjoxMDIwMDAwMDcsInNvdXJjZSI6MCwibG9ja19yZWdpb25fdGltZSI6MTc5MDQ0NjkxNywiY2xpZW50X3R5cGUiOjIsInNpZ25hdHVyZV9tZDUiOiI3NDI4YjI1M2RlZmMxNjQwMThjNjA0YTFlYmJmZWJkZiIsInVzaW5nX3ZlcnNpb24iOjEsInJlbGVhc2VfY2hhbm5lbCI6ImFuZHJvaWQiLCJyZWxlYXNlX3ZlcnNpb24iOiJPQjU1IiwiZXhwIjoxNzkwNTE5MDIxfQ."
-    "V6XtZGXkADFY9UG8QFlFlPEM68_XM4T9s0_EU90icYE"
+    "eyJhY2NvdW50X2lkIjoyMTEyMjEwNjk2LCJuaWNrbmFtZSI6Ilo2eWZTL09rZ3RmaTh2cytONFdOcnREU3RJUFE1YWlNIiwibm90aV9yZWdpb24iOiJJTkQiLCJsb2NrX3JlZ2lvbiI6IklORCIsImV4dGVybmFsX2lkIjoiYmEyZmI0MTQ1YzViOTVlYjc5MmM0OWVjMTcwZDA5NjAiLCJleHRlcm5hbF90eXBlIjozLCJwbGF0X2lkIjoxLCJjbGllbnRfdmVyc2lvbiI6IjEuMTMyLjgiLCJjbGllbnRfdmVyc2lvbl9jb2RlIjoiMjAxOTEyMTIyOSIsImVtdWxhdG9yX3Njb3JlIjoxMDAsImlzX2VtdWxhdG9yIjp0cnVlLCJjb3VudHJ5X2NvZGUiOiJJTiIsImV4dGVybmFsX3VpZCI6MjUzNzI2MDY2MDgwNDk4LCJyZWdfYXZhdGFyIjoxMDIwMDAwMDQsInNvdXJjZSI6MCwibG9ja19yZWdpb25fdGltZSI6MTU5MjYxODc4MiwiY2xpZW50X3R5cGUiOjIsInNpZ25hdHVyZV9tZDUiOiI3NDI4YjI1M2RlZmMxNjQwMThjNjA0YTFlYmJmZWJkZiIsInVzaW5nX3ZlcnNpb24iOjEsInJlbGVhc2VfY2hhbm5lbCI6ImFuZHJvaWQiLCJyZWxlYXNlX3ZlcnNpb24iOiJPQjU1IiwiZXhwIjoxNzkwNTYyNDkxfQ."
+    "EysyQWUsRVpJDAykcPkc1dEWaEvwZXAOm9VXiRIqbgU"
 )
 
 _invalid_tokens: set[str] = set()

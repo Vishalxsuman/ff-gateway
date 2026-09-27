@@ -255,9 +255,14 @@ def _do_garena_major_login(open_id: str, access_token: str) -> Optional[tuple[st
             gd.timestamp = "2024-12-05 18:15:32"
             gd.game_name = "free fire"
             gd.game_version = 1
-            gd.version_code = "1.132.1"
+            gd.version_code = "1.132.8"
+            gd.build_number = "2019121229"
+            gd.unique_id = "7428b253defc164018c604a1ebbfebdf"
+            gd.field_60 = 1
             gd.os_info = "Android OS 9 / API-28"
             gd.device_type = "Handheld"
+            gd.device_form_factor = "Handheld"
+            gd.device_model = "ASUS_Z01QD"
             gd.network_provider = "Verizon"
             gd.connection_type = "WIFI"
             gd.screen_width = 1280

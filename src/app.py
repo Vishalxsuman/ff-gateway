@@ -16,6 +16,7 @@ from src.core.logger import setup_logging, get_logger
 from src.ff import auth
 from src.routes.health import health_bp
 from src.routes.player import player_bp
+from src.routes.token import token_bp
 from src.routes.version import version_bp
 
 log = get_logger(__name__)
@@ -39,7 +40,7 @@ def create_app() -> Flask:
     def add_cors(response):
         origins = ", ".join(config.cors_origins)
         response.headers["Access-Control-Allow-Origin"] = origins
-        response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
         response.headers["Access-Control-Allow-Headers"] = (
             "Content-Type, Authorization, X-Request-ID"
         )
@@ -54,6 +55,7 @@ def create_app() -> Flask:
     # ── Blueprints ────────────────────────────────────────────────────────────
     app.register_blueprint(health_bp)
     app.register_blueprint(player_bp)
+    app.register_blueprint(token_bp)
     app.register_blueprint(version_bp)
 
     # ── 404 / 405 handlers ───────────────────────────────────────────────────

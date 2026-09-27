@@ -120,7 +120,11 @@ def with_retry(
                     raise
                 except Exception as exc:
                     last_exc = exc
-                    circuit_breaker.record_failure(circuit_key)
+                    # Do NOT trip circuit breaker on authentication failures (HTTP 401 / 403)
+                    if "401" not in str(exc) and "403" not in str(exc):
+                        circuit_breaker.record_failure(circuit_key)
+                    else:
+                        log.warning("Authentication failure (401/403) for '%s': %s", circuit_key, exc)
                     if attempt < max_attempts:
                         delay = base_delay * (2 ** (attempt - 1))
                         log.warning(

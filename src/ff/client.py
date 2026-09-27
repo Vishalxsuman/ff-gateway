@@ -87,6 +87,8 @@ def _call_garena(uid: int, region: str) -> dict[str, Any]:
 
     if resp.status_code != 200:
         error_text = resp.text.strip()[:200] or f"HTTP {resp.status_code}"
+        if resp.status_code in (401, 403):
+            log.warning("Garena Auth Token rejected (HTTP %d): %s. Update token via POST /token/update or FF_GUEST_TOKEN.", resp.status_code, error_text)
         raise RuntimeError(f"Garena HTTP {resp.status_code}: {error_text}")
 
     pb = data_pb2.AccountPersonalShowInfo()

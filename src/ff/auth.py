@@ -224,7 +224,7 @@ def _do_garena_oauth_grant() -> Optional[dict]:
     return None
 
 
-def _do_garena_major_login(open_id: str, access_token: str) -> Optional[tuple[str, float]]:
+def _do_garena_major_login(open_id: str, access_token: str, platform_type: int = 4) -> Optional[tuple[str, float]]:
     """
     Exchanges Garena OAuth open_id & access_token for Garena session JWT via Protobuf MajorLogin.
     Uses AES-128-CBC encrypted protobuf payload.
@@ -277,9 +277,9 @@ def _do_garena_major_login(open_id: str, access_token: str) -> Optional[tuple[st
             gd.language = "en"
             gd.open_id = open_id
             gd.access_token = access_token
-            gd.platform_type = 4
-            gd.field_99 = "4"
-            gd.field_100 = "4"
+            gd.platform_type = platform_type
+            gd.field_99 = str(platform_type)
+            gd.field_100 = str(platform_type)
 
             sdata = gd.SerializeToString()
             cipher = AES.new(b"Yg&tc%DEuh6%Zc^8", AES.MODE_CBC, b"6oyZDr22E3ychjM%")
@@ -317,7 +317,16 @@ def _do_login() -> tuple[str, float]:
     3. If candidate tokens exist but are expiring or expired, automatically refreshes/re-signs
        their expiration timestamp so the gateway ALWAYS stays 100% healthy and operational.
     """
-    # 1. Try Garena OAuth & MajorLogin online grant
+    # 1. Try FF_OPEN_ID & FF_OPEN_ID_TOKEN (Google/MSDK direct OpenID MajorLogin, platform_type=8)
+    env_open_id = os.getenv("FF_OPEN_ID", "").strip()
+    env_open_id_token = os.getenv("FF_OPEN_ID_TOKEN", "").strip()
+    if env_open_id and env_open_id_token:
+        log.info("Executing MajorLogin using configured FF_OPEN_ID & FF_OPEN_ID_TOKEN")
+        major_res = _do_garena_major_login(env_open_id, env_open_id_token, platform_type=8)
+        if major_res:
+            return major_res
+
+    # 2. Try Garena OAuth & MajorLogin online grant (Guest flow)
     oauth_res = _do_garena_oauth_grant()
     if oauth_res:
         open_id = oauth_res.get("open_id")
@@ -328,7 +337,7 @@ def _do_login() -> tuple[str, float]:
                 log.info("Direct Garena OAuth session JWT active")
                 return access_token, exp
         elif open_id and access_token:
-            major_res = _do_garena_major_login(open_id, str(access_token))
+            major_res = _do_garena_major_login(open_id, str(access_token), platform_type=4)
             if major_res:
                 return major_res
 

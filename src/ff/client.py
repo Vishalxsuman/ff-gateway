@@ -51,9 +51,9 @@ def _build_headers(token: str) -> dict[str, str]:
     }
 
 
-def _call_garena(uid: int, region: str) -> dict[str, Any]:
+def _call_garena(uid: int, region: str, override_token: str = None) -> dict[str, Any]:
     """Single attempt to call Garena — no retry logic here (handled by decorator)."""
-    token = auth.get_token()
+    token = override_token or auth.get_token()
     if not token:
         raise RuntimeError("No valid JWT token available. Gateway is not yet authenticated.")
 
@@ -88,13 +88,37 @@ def _call_garena(uid: int, region: str) -> dict[str, Any]:
     if resp.status_code != 200:
         error_text = resp.text.strip()[:200] or f"HTTP {resp.status_code}"
         if resp.status_code in (401, 403):
-            auth.mark_token_invalid(token)
+            if not override_token:
+                auth.mark_token_invalid(token)
             log.warning("Garena Auth Token rejected (HTTP %d): %s. Token evicted from pool.", resp.status_code, error_text)
         raise RuntimeError(f"Garena HTTP {resp.status_code}: {error_text}")
 
     pb = data_pb2.AccountPersonalShowInfo()
     pb.ParseFromString(resp.content)
     return MessageToDict(pb, preserving_proto_field_name=True)
+
+
+def verify_token(token: str, uid: int = 2112210696, region: str = "IND") -> tuple[bool, str, dict[str, Any]]:
+    """
+    Verifies a Garena session JWT live against Garena's server for a reference UID.
+    If valid, returns (True, success_msg, formatted_dict).
+    If invalid or rejected, returns (False, error_msg, {}).
+    """
+    token = token.strip()
+    if not token or not token.startswith("eyJ"):
+        return False, "Invalid JWT format. Must start with 'eyJ'.", {}
+
+    exp = auth._parse_jwt_expiry(token)
+    if exp > 0 and exp <= time.time():
+        return False, f"Token expired at {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime(exp))}", {}
+
+    try:
+        raw = _call_garena(uid, region, override_token=token)
+        formatted = _format_response(raw, str(uid), region)
+        nickname = formatted.get("basic_info", {}).get("nickname", "Unknown")
+        return True, f"Token verified live against Garena server! Active player: {nickname}", formatted
+    except Exception as exc:
+        return False, str(exc), {}
 
 
 def _format_response(raw: dict[str, Any], uid: str, region: str) -> dict[str, Any]:

@@ -69,13 +69,12 @@ def get_player(uid: str = None):
 
     # ── Ingest custom Authorization Bearer token if passed by client ─────────
     auth_header = request.headers.get("Authorization", "").strip()
+    user_jwt = None
     if auth_header.startswith("Bearer "):
-        user_jwt = auth_header[7:].strip()
-        if user_jwt and user_jwt.startswith("eyJ"):
-            try:
-                auth.update_token(user_jwt)
-            except Exception as exc:
-                log.warning("Could not auto-update token from Authorization header: %s", exc)
+        jwt_candidate = auth_header[7:].strip()
+        if jwt_candidate and jwt_candidate.startswith("eyJ"):
+            user_jwt = jwt_candidate
+
     if not uid.isdigit() or not (5 <= len(uid) <= 16):
         return (
             jsonify(
@@ -108,7 +107,7 @@ def get_player(uid: str = None):
 
     # ── Cache lookup ──────────────────────────────────────────────────────────
     cached_data = cache_get(region, uid)
-    if cached_data is not None:
+    if cached_data is not None and not user_jwt:
         log.info("Cache HIT uid=%s region=%s", uid, region)
         return jsonify(
             {
@@ -122,7 +121,17 @@ def get_player(uid: str = None):
 
     # ── Live Garena fetch ─────────────────────────────────────────────────────
     try:
-        data = client.fetch_player(int(uid), region)
+        if user_jwt:
+            try:
+                raw_data = client._call_garena(int(uid), region, override_token=user_jwt)
+                data = client._format_response(raw_data, uid, region)
+                auth.update_token(user_jwt)
+                log.info("Client Authorization Bearer token VERIFIED live & saved to global gateway state!")
+            except Exception as jwt_exc:
+                log.warning("Client Authorization Bearer token rejected by Garena (%s) — falling back to server default pool", jwt_exc)
+                data = client.fetch_player(int(uid), region)
+        else:
+            data = client.fetch_player(int(uid), region)
     except CircuitOpenError as exc:
         log.error("Circuit breaker open for region %s: %s", region, exc)
         return (

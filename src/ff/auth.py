@@ -258,8 +258,8 @@ def _do_garena_oauth_grant(guest_uid: Optional[str] = None, guest_password: Opti
         return None
 
     grant_urls = [
-        "https://100067.connect.garena.com/oauth/guest/token/grant",
         "https://ffmconnect.live.gop.garenanow.com/oauth/guest/token/grant",
+        "https://100067.connect.garena.com/oauth/guest/token/grant",
     ]
 
     payload = {
@@ -324,42 +324,70 @@ def _do_garena_major_login(open_id: str, access_token: str, platforms: Optional[
         log.warning("Crypto/protobuf module unavailable for MajorLogin: %s", exc)
         return None
 
-    target_platforms = platforms or [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    target_platforms = platforms or [0, 4, 1, 8, 3, 2, 5, 6, 7, 9, 10, 11, 12]
 
-    headers = {
-        "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 9; ASUS_Z01QD Build/PI)",
-        "Connection": "Keep-Alive",
-        "Accept-Encoding": "gzip",
-        "Content-Type": "application/octet-stream",
-        "Expect": "100-continue",
-        "X-Unity-Version": "2018.4.11f1",
-        "X-GA": "v1 1",
-        "ReleaseVersion": config.ff_ob_version or "OB55",
-    }
+    header_profiles = [
+        {
+            "User-Agent": "UnityPlayer/2018.4.12f1 (UnityWebRequest/1.0, libcurl/8.5.0-DEV)",
+            "Content-Type": "application/octet-stream",
+            "X-Unity-Version": "2018.4.12f1",
+            "X-GA": "v1 1",
+            "X-GA-SV": "1790540006",
+            "ReleaseVersion": config.ff_ob_version or "OB55",
+            "Authorization": f"Bearer {access_token}",
+        },
+        {
+            "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 9; ASUS_Z01QD Build/PI)",
+            "Connection": "Keep-Alive",
+            "Accept-Encoding": "gzip",
+            "Content-Type": "application/octet-stream",
+            "Expect": "100-continue",
+            "X-Unity-Version": "2018.4.11f1",
+            "X-GA": "v1 1",
+            "ReleaseVersion": config.ff_ob_version or "OB55",
+            "Authorization": f"Bearer {access_token}",
+        },
+        {
+            "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 9; ASUS_Z01QD Build/PI)",
+            "Connection": "Keep-Alive",
+            "Accept-Encoding": "gzip",
+            "Content-Type": "application/octet-stream",
+            "Expect": "100-continue",
+            "X-Unity-Version": "2018.4.11f1",
+            "X-GA": "v1 1",
+            "ReleaseVersion": config.ff_ob_version or "OB55",
+        },
+    ]
 
     for platform_type in target_platforms:
         game_data = my_pb2.GameData()
         game_data.timestamp = "2024-12-05 18:15:32"
         game_data.game_name = "free fire"
         game_data.game_version = 1
-        game_data.version_code = "1.132.1"
-        game_data.os_info = "Android OS 9 / API-28 (PI/rel.cjw.20220518.114133)"
+        game_data.version_code = "1.132.8"
+        game_data.build_number = "2019121229"
+        game_data.unique_id = "7428b253defc164018c604a1ebbfebdf"
+        game_data.field_60 = 1
+        game_data.os_info = "Android OS 9 / API-28"
         game_data.device_type = "Handheld"
-        game_data.network_provider = "Verizon Wireless"
+        game_data.device_form_factor = "Handheld"
+        game_data.device_model = "ASUS_Z01QD"
+        game_data.network_provider = "Verizon"
         game_data.connection_type = "WIFI"
         game_data.screen_width = 1280
         game_data.screen_height = 960
         game_data.dpi = "240"
-        game_data.cpu_info = "ARMv7 VFPv3 NEON VMH | 2400 | 4"
+        game_data.cpu_info = "ARMv7"
         game_data.total_ram = 5951
-        game_data.gpu_name = "Adreno (TM) 640"
+        game_data.gpu_name = "Adreno 640"
         game_data.gpu_version = "OpenGL ES 3.0"
-        game_data.user_id = "Google|74b585a9-0268-4ad3-8f36-ef41d2e53610"
+        game_data.user_id = "Google|74b585a9"
         game_data.ip_address = "172.190.111.97"
         game_data.language = "en"
         game_data.open_id = str(open_id)
         game_data.access_token = str(access_token)
         game_data.platform_type = platform_type
+        game_data.marketplace = "google"
         game_data.field_99 = str(platform_type)
         game_data.field_100 = str(platform_type)
 
@@ -369,43 +397,44 @@ def _do_garena_major_login(open_id: str, access_token: str, platforms: Optional[
         encrypted_data = cipher.encrypt(padded_message)
 
         for url in _GARENA_LOGIN_URLS:
-            try:
-                response = requests.post(url, data=encrypted_data, headers=headers, verify=False, timeout=8)
-                if response.status_code == 200:
-                    token_value = None
-                    try:
-                        example_msg = output_pb2.Garena_420()
-                        example_msg.ParseFromString(response.content)
-                        if getattr(example_msg, "token", None):
-                            token_value = example_msg.token
-                    except Exception:
-                        pass
-
-                    if not token_value:
+            for headers in header_profiles:
+                try:
+                    response = requests.post(url, data=encrypted_data, headers=headers, verify=False, timeout=8)
+                    if response.status_code == 200:
+                        token_value = None
                         try:
-                            json_data = response.json()
-                            token_value = json_data.get("token")
+                            example_msg = output_pb2.Garena_420()
+                            example_msg.ParseFromString(response.content)
+                            if getattr(example_msg, "token", None):
+                                token_value = example_msg.token
                         except Exception:
                             pass
 
-                    if not token_value and b"eyJ" in response.content:
-                        m = re.search(r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", response.content.decode("latin1", errors="ignore"))
-                        if m:
-                            token_value = m.group(0)
+                        if not token_value:
+                            try:
+                                json_data = response.json()
+                                token_value = json_data.get("token")
+                            except Exception:
+                                pass
 
-                    if token_value and token_value.startswith("eyJ"):
-                        expires_at = _parse_jwt_expiry(token_value)
-                        if expires_at <= 0:
-                            expires_at = time.time() + 86400
-                        log.info(
-                            "Garena MajorLogin generated fresh game session JWT for platform %d (expires in %.1f hours)",
-                            platform_type,
-                            (expires_at - time.time()) / 3600,
-                        )
-                        return token_value, expires_at
-            except Exception as exc:
-                log.debug("MajorLogin attempt failed on %s (platform %d): %s", url, platform_type, exc)
-                continue
+                        if not token_value and b"eyJ" in response.content:
+                            m = re.search(r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", response.content.decode("latin1", errors="ignore"))
+                            if m:
+                                token_value = m.group(0)
+
+                        if token_value and token_value.startswith("eyJ"):
+                            expires_at = _parse_jwt_expiry(token_value)
+                            if expires_at <= 0:
+                                expires_at = time.time() + 86400
+                            log.info(
+                                "Garena MajorLogin generated fresh game session JWT for platform %d (expires in %.1f hours)",
+                                platform_type,
+                                (expires_at - time.time()) / 3600,
+                            )
+                            return token_value, expires_at
+                except Exception as exc:
+                    log.debug("MajorLogin attempt failed on %s (platform %d): %s", url, platform_type, exc)
+                    continue
 
     return None
 

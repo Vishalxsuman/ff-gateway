@@ -178,8 +178,8 @@ def _do_garena_oauth_grant() -> Optional[dict]:
     Perform OAuth guest token grant with Garena MSDK server using guest UID & password.
     Returns response dict containing access_token, open_id, and expiry info.
     """
-    uid = (os.getenv("FF_GUEST_UID") or getattr(config, "ff_guest_uid", "")).strip()
-    password = (os.getenv("FF_GUEST_PASSWORD") or getattr(config, "ff_guest_password", "")).strip()
+    uid = (os.getenv("FF_GUEST_UID") or getattr(config, "ff_guest_uid", "") or "7943649152").strip()
+    password = (os.getenv("FF_GUEST_PASSWORD") or getattr(config, "ff_guest_password", "") or "1219443E419AD8761270FCB2CF0649AF2C40A6B0286F9466E16DC4D09CED42D3").strip()
 
     if not uid or not password:
         log.warning("FF_GUEST_UID / FF_GUEST_PASSWORD not configured — skipping Garena OAuth grant check")
@@ -278,6 +278,7 @@ def _do_garena_major_login(open_id: str, access_token: str, platform_type: int =
             gd.open_id = open_id
             gd.access_token = access_token
             gd.platform_type = platform_type
+            gd.marketplace = "google"
             gd.field_99 = str(platform_type)
             gd.field_100 = str(platform_type)
 
@@ -318,8 +319,8 @@ def _do_login() -> tuple[str, float]:
        their expiration timestamp so the gateway ALWAYS stays 100% healthy and operational.
     """
     # 1. Try FF_OPEN_ID & FF_OPEN_ID_TOKEN (Google/MSDK direct OpenID MajorLogin, platform_type=8)
-    env_open_id = os.getenv("FF_OPEN_ID", "").strip()
-    env_open_id_token = os.getenv("FF_OPEN_ID_TOKEN", "").strip()
+    env_open_id = os.getenv("FF_OPEN_ID", "29f3c09513f42bc0c5f0d7ce3705c558").strip()
+    env_open_id_token = os.getenv("FF_OPEN_ID_TOKEN", "ecd369b62eb8a9497cba801ab87e44e00b50c447cf0a833dbb8d8a0cfdd28fdf").strip()
     if env_open_id and env_open_id_token:
         log.info("Executing MajorLogin using configured FF_OPEN_ID & FF_OPEN_ID_TOKEN")
         major_res = _do_garena_major_login(env_open_id, env_open_id_token, platform_type=8)

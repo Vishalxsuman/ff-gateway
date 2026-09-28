@@ -1,8 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-token.py — Token management route.
+token.py — Token management and JWT generation routes.
 
-Allows updating the active Garena session JWT token via POST /token/update.
+Endpoints:
+  - GET /token/status : Token health, expiry, and state
+  - POST /token/update : Dynamically upload and verify a new Garena session JWT
+  - GET /access-jwt, POST /access-jwt : Generate Garena session JWT given access_token (and optional open_id)
+  - GET /token, POST /token : Generate Garena session JWT given guest uid and password
 """
 
 from flask import Blueprint, jsonify, request
@@ -29,6 +33,51 @@ def get_token_status():
         "expires_at_iso": auth.datetime.fromtimestamp(exp, tz=auth.timezone.utc).isoformat() if exp > 0 else None,
         "details": snap,
     })
+
+
+@token_bp.route("/access-jwt", methods=["GET", "POST"])
+def access_jwt():
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        access_token = (data.get("access_token") or data.get("token") or "").strip()
+        open_id = (data.get("open_id") or "").strip() or None
+    else:
+        access_token = (request.args.get("access_token") or request.args.get("token") or "").strip()
+        open_id = (request.args.get("open_id") or "").strip() or None
+
+    if not access_token:
+        return jsonify({"message": "missing access_token"}), 400
+
+    result, err = auth.generate_jwt_from_access_token(access_token, open_id)
+    if err or not result:
+        return jsonify({"message": err or "Failed to generate JWT"}), 400
+
+    return jsonify(result), 200
+
+
+@token_bp.route("/token", methods=["GET", "POST"])
+def oauth_guest_token():
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        uid = (data.get("uid") or "").strip() or None
+        password = (data.get("password") or "").strip() or None
+        access_token = (data.get("access_token") or "").strip() or None
+        open_id = (data.get("open_id") or "").strip() or None
+    else:
+        uid = (request.args.get("uid") or "").strip() or None
+        password = (request.args.get("password") or "").strip() or None
+        access_token = (request.args.get("access_token") or "").strip() or None
+        open_id = (request.args.get("open_id") or "").strip() or None
+
+    if access_token:
+        result, err = auth.generate_jwt_from_access_token(access_token, open_id)
+    else:
+        result, err = auth.generate_jwt_from_guest(uid, password)
+
+    if err or not result:
+        return jsonify({"message": err or "Failed to generate guest JWT"}), 400
+
+    return jsonify(result), 200
 
 
 @token_bp.route("/token/update", methods=["POST", "OPTIONS"])
@@ -67,3 +116,4 @@ def update_token():
     except Exception as exc:
         log.error("Failed to update token: %s", exc)
         return jsonify({"success": False, "error": str(exc)}), 500
+

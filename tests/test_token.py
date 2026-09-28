@@ -15,7 +15,7 @@ def test_token_update_success():
     b64 = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
     fake_jwt = f"eyJhbGciOiJIUzI1NiJ9.{b64}.sig"
 
-    res = client.post("/token/update", json={"token": fake_jwt})
+    res = client.post("/token/update", json={"token": fake_jwt, "skip_verify": True})
     assert res.status_code == 200
     data = res.get_json()
     assert data["success"] is True

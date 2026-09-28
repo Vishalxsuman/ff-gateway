@@ -632,31 +632,65 @@ def health_status() -> str:
     return _state.health_status()
 
 
-# ── Background refresh thread ─────────────────────────────────────────────────
+# ── Background 24x7 Keep-Alive & Auto-Renewal Daemon ───────────────────────────
 
 
 def _background_refresh_loop() -> None:
+    """
+    Continuous 24x7 daemon loop:
+    1. Checks token expiration every 30 seconds.
+    2. Proactively runs a heartbeat ping every 120 seconds to keep Garena session warm.
+    3. If token expires or is rejected upstream, immediately self-heals and rotates token.
+    """
+    last_heartbeat = time.time()
     while True:
-        time.sleep(_CHECK_INTERVAL_SECONDS)
-        if _state.needs_refresh():
-            _refresh_token()
+        try:
+            time.sleep(30)
+            now = time.time()
+
+            # 1. Check if token needs refresh
+            if _state.needs_refresh():
+                log.info("Token approaching expiration window (< 1h) — executing auto-refresh")
+                _refresh_token()
+
+            # 2. Proactive heartbeat ping every 120s
+            if now - last_heartbeat >= 120:
+                last_heartbeat = now
+                curr_tok = _state.get_token()
+                if curr_tok:
+                    try:
+                        from src.ff.client import verify_token
+
+                        is_valid, msg, _ = verify_token(curr_tok, uid=2112210696, region="IND")
+                        if not is_valid:
+                            log.warning("Heartbeat detected invalid/expired token (%s) — auto-healing...", msg)
+                            mark_token_invalid(curr_tok)
+                            _refresh_token()
+                        else:
+                            log.debug("24x7 Heartbeat OK — Garena session alive")
+                    except Exception as exc:
+                        log.debug("Heartbeat ping check: %s", exc)
+
+        except Exception as loop_exc:
+            log.warning("Exception in background keep-alive loop: %s", loop_exc)
+            time.sleep(10)
 
 
 def initialize() -> None:
     """
     Called once at startup:
       1. Perform fresh login & JWT auto-refresh via _refresh_token().
-      2. Start background refresh daemon thread.
+      2. Start 24x7 background keep-alive & refresh daemon thread.
     """
-    log.info("Initializing Garena login & token manager")
+    log.info("Initializing Garena login & 24x7 token manager")
     _refresh_token()
 
     # Start background refresh daemon thread
     thread = threading.Thread(
         target=_background_refresh_loop,
-        name="ff-token-refresh",
+        name="ff-token-keepalive",
         daemon=True,
     )
     thread.start()
-    log.info("Token refresh background thread started")
+    log.info("24x7 Token Keep-Alive & Auto-Renewal background thread active")
 

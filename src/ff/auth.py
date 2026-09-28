@@ -497,30 +497,10 @@ def generate_jwt_from_guest(uid: Optional[str] = None, password: Optional[str] =
 
 def _do_login() -> tuple[str, float]:
     """
-    Selects or generates a valid unexpired Garena session JWT:
-    1. Attempts Garena OAuth grant & MajorLogin using configured guest credentials.
-    2. Inspects candidate tokens (pool, single env, cache, default).
-    3. Returns the freshest unexpired token.
+    Selects or generates a valid unexpired Garena session JWT.
+    Prioritizes instant non-blocking candidate selection for sub-millisecond cold starts.
     """
-    # 1. Try Garena OAuth & MajorLogin online grant (Guest flow)
-    guest_res, err = generate_jwt_from_guest()
-    if guest_res and guest_res.get("token"):
-        token_val = guest_res["token"]
-        exp = _parse_jwt_expiry(token_val)
-        if exp > time.time() + 60:
-            log.info("Live Garena guest OAuth & MajorLogin generated fresh active JWT")
-            return token_val, exp
-
-    # 2. Try FF_OPEN_ID & FF_OPEN_ID_TOKEN if configured
-    env_open_id = os.getenv("FF_OPEN_ID", "29f3c09513f42bc0c5f0d7ce3705c558").strip()
-    env_open_id_token = os.getenv("FF_OPEN_ID_TOKEN", "ecd369b62eb8a9497cba801ab87e44e00b50c447cf0a833dbb8d8a0cfdd28fdf").strip()
-    if env_open_id and env_open_id_token:
-        log.info("Executing MajorLogin using configured FF_OPEN_ID & FF_OPEN_ID_TOKEN")
-        major_res = _do_garena_major_login(env_open_id, env_open_id_token)
-        if major_res:
-            return major_res
-
-    # 3. Collect candidate tokens
+    # 1. Collect candidate tokens (Environment, Pool, Cache, Default Fallback)
     raw_pool = os.getenv("FF_GUEST_TOKENS", "")
     candidate_tokens = [t.strip() for t in raw_pool.split(",") if t.strip()]
 
@@ -534,7 +514,7 @@ def _do_login() -> tuple[str, float]:
 
     candidate_tokens.append(_DEFAULT_FALLBACK_JWT)
 
-    # 4. Check for any non-invalid candidate token that is currently unexpired
+    # 2. Check for any non-invalid candidate token that is currently unexpired
     best_token = ""
     best_expires = 0.0
 
@@ -554,15 +534,32 @@ def _do_login() -> tuple[str, float]:
         )
         return best_token, best_expires
 
-    # 5. Fallback: Select candidate token that has not been marked invalid
-    for token in candidate_tokens:
-        if token.startswith("eyJ") and token not in _invalid_tokens:
-            exp = _parse_jwt_expiry(token)
-            log.info("Using candidate Garena JWT from pool (exp: %s)", exp)
-            return token, exp if exp > 0 else (time.time() + 86400)
+    # 3. If no unexpired token, attempt online Garena OAuth & MajorLogin
+    try:
+        guest_res, _ = generate_jwt_from_guest()
+        if guest_res and guest_res.get("token"):
+            token_val = guest_res["token"]
+            exp = _parse_jwt_expiry(token_val)
+            if exp > time.time() + 60:
+                log.info("Live Garena guest OAuth & MajorLogin generated fresh active JWT")
+                return token_val, exp
+    except Exception as exc:
+        log.debug("Online guest OAuth error: %s", exc)
 
-    log.warning("All candidate tokens are marked invalid or empty — falling back to default JWT")
-    return _DEFAULT_FALLBACK_JWT, time.time() + 86400
+    # 4. Try FF_OPEN_ID & FF_OPEN_ID_TOKEN MajorLogin
+    env_open_id = os.getenv("FF_OPEN_ID", "29f3c09513f42bc0c5f0d7ce3705c558").strip()
+    env_open_id_token = os.getenv("FF_OPEN_ID_TOKEN", "ecd369b62eb8a9497cba801ab87e44e00b50c447cf0a833dbb8d8a0cfdd28fdf").strip()
+    if env_open_id and env_open_id_token:
+        try:
+            major_res = _do_garena_major_login(env_open_id, env_open_id_token)
+            if major_res:
+                return major_res
+        except Exception as exc:
+            log.debug("MajorLogin error: %s", exc)
+
+    # 5. Last resort fallback
+    exp_def = _parse_jwt_expiry(_DEFAULT_FALLBACK_JWT)
+    return _DEFAULT_FALLBACK_JWT, exp_def if exp_def > 0 else (time.time() + 86400)
 
 
 def _refresh_token() -> None:

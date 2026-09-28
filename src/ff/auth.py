@@ -182,8 +182,8 @@ _DEFAULT_FALLBACK_JWT = (
     "lbXVsYXRvcl9zY29yZSI6MTAwLCJpc19lbXVsYXRvciI6dHJ1ZSwiY291bnRyeV9jb2RlIjoiSU4iLCJleHRlcm5hbF91aWQiOjE3MDYwMDAwNjAyMDUsInJlZ19"
     "hdmF0YXIiOjEwMjAwMDAwNCwic291cmNlIjowLCJsb2NrX3JlZ2lvbl90aW1lIjoxNTg5NjUwMDQyLCJjbGllbnRfdHlwZSI6Miwic2lnbmF0dXJlX21kNSI6Ijc0"
     "MjhiMjUzZGVmYzE2NDAxOGM2MDRhMWViYmZlYmRmIiwidXNpbmdfdmVyc2lvbiI6MSwicmVsZWFzZV9jaGFubmVsIjoiYW5kcm9pZCIsInJlbGVhc2VfdmVyc2lv"
-    "biI6Ik9CNTUiLCJleHAiOjE3OTA2MjQ1MzJ9."
-    "pJoT-2xbLfF-qPqAtAb7V4EtX3xgH4CU9cI1todeVy0"
+    "biI6Ik9CNTUiLCJleHAiOjE3OTA2MjkyNjR9."
+    "H9ejzs4X086WemJKhyjvvn1-cYO4obZvkjcbZNdI9oo"
 )
 
 _invalid_tokens: set[str] = set()

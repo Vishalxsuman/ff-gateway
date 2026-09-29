@@ -33,8 +33,10 @@ jobs:
 
       - name: Run tests with coverage
         env:
-          FF_GUEST_UID: "1948201948"
-          FF_GUEST_PASSWORD: "ci_placeholder"
+          FF_SESSION_JWT: ""
+          FF_TOKEN_PROVIDER_URL: ""
+          FF_TOKEN_PROVIDER_SECRET: ""
+          FF_TOKEN_UPDATE_KEY: "test-update-key"
           FF_OB_VERSION: "OB55"
           AES_KEY: "Yg&tc%DEuh6%Zc^8"
           AES_IV: "6oyZDr22E3ychjM%"

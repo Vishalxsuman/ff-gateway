@@ -28,52 +28,35 @@ def test_parse_jwt_expiry_bad_token():
 
 
 def test_mark_token_invalid():
-    """mark_token_invalid should flag rejected tokens and prevent selection in pool."""
-    from src.ff.auth import mark_token_invalid, _invalid_tokens, _do_login
+    """mark_token_invalid should evict a rejected session from active state."""
+    from src.ff.auth import mark_token_invalid, _invalid_tokens, update_token, get_token
 
-    bad_token = "eyJhbGciOiJIUzI1NiJ9.eyJhY2NvdW50X2lkIjo5OTksImV4cCI6MjA0ODU1MjYyM30.sig"
+    payload = {"exp": int(time.time()) + 3600}
+    encoded = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
+    bad_token = f"eyJhbGciOiJIUzI1NiJ9.{encoded}.sig"
+    update_token(bad_token)
     mark_token_invalid(bad_token)
     assert bad_token in _invalid_tokens
+    assert get_token() == ""
 
 
-def test_token_state_needs_refresh_when_empty():
-    from src.ff.auth import _TokenState
+def test_gateway_fails_closed_without_authorized_token_source(monkeypatch):
+    from src.ff import auth
 
-    state = _TokenState()
-    assert state.needs_refresh() is True
+    monkeypatch.delenv("FF_SESSION_JWT", raising=False)
+    monkeypatch.delenv("FF_TOKEN_PROVIDER_URL", raising=False)
+    monkeypatch.delenv("FF_TOKEN_PROVIDER_SECRET", raising=False)
+    monkeypatch.setattr(auth, "_token", "")
+    monkeypatch.setattr(auth, "_expires_at", 0.0)
 
-
-def test_token_state_healthy_after_set():
-    from src.ff.auth import _TokenState
-
-    state = _TokenState()
-    state.set("mytoken", time.time() + 7200)
-    assert state.health_status() == "healthy"
-    assert state.needs_refresh() is False
-    assert state.get_token() == "mytoken"
+    assert auth.get_token() == ""
+    assert auth.health_status() == "unhealthy"
 
 
-def test_token_state_degraded_after_3_failures():
-    from src.ff.auth import _TokenState
+def test_update_token_rejects_expired_token():
+    from src.ff.auth import update_token
 
-    state = _TokenState()
-    state.set("token", time.time() + 3600)
-    state.record_failure()
-    state.record_failure()
-    assert state.health_status() == "healthy"
-    state.record_failure()
-    assert state.health_status() == "degraded"
-    assert state.is_degraded is True
-
-
-def test_token_state_recovers_after_set():
-    from src.ff.auth import _TokenState
-
-    state = _TokenState()
-    state.record_failure()
-    state.record_failure()
-    state.record_failure()
-    assert state.is_degraded is True
-    state.set("fresh_token", time.time() + 7200)
-    assert state.is_degraded is False
-    assert state.consecutive_failures == 0
+    payload = {"exp": int(time.time()) - 60}
+    encoded = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
+    with pytest.raises(ValueError):
+        update_token(f"eyJhbGciOiJIUzI1NiJ9.{encoded}.sig")

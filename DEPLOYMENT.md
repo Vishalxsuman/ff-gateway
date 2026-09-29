@@ -63,8 +63,10 @@ add ALL of the following:
 
 | Setting Name | Value | Notes |
 |---|---|---|
-| `FF_GUEST_UID` | `1948201948` | Your Garena guest account UID |
-| `FF_GUEST_PASSWORD` | `your_password` | Mark as **slot setting** |
+| `FF_SESSION_JWT` | Authorized session JWT | Optional when using a provider; mark as **slot setting** |
+| `FF_TOKEN_PROVIDER_URL` | Trusted HTTPS token endpoint | Optional; provider must be authorized to issue the session |
+| `FF_TOKEN_PROVIDER_SECRET` | Provider bearer secret | Optional; mark as **slot setting** |
+| `FF_TOKEN_UPDATE_KEY` | Long random shared secret | Required to authorize `/token/update`; mark as **slot setting** |
 | `FF_OB_VERSION` | `OB55` | Update when Garena patches |
 | `AES_KEY` | `Yg&tc%DEuh6%Zc^8` | Update if Garena rotates keys |
 | `AES_IV` | `6oyZDr22E3ychjM%` | Update if Garena rotates keys |
@@ -75,7 +77,7 @@ add ALL of the following:
 | `ENABLE_RATE_LIMIT` | `true` | |
 | `CORS_ORIGINS` | `https://your-backend.azurewebsites.net` | Restrict in production |
 
-> **Important:** Mark `FF_GUEST_PASSWORD` and `AES_KEY` as **slot settings** (they're secrets).
+> **Important:** Never put real tokens or provider secrets in source control. Store them in Azure App Settings/Key Vault and mark them as **slot settings**.
 
 Enable **Always On** to prevent cold starts:
 - App Service → Configuration → General Settings → Always On → **On**

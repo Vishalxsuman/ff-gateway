@@ -55,7 +55,7 @@ Esporizon backend.
 }
 ```
 
-### `GET /player/{uid}?region=IND`
+### `GET /player/{uid}?region=IND` or `GET /info?uid={uid}&region=IND`
 ```bash
 curl "https://your-gateway.azurewebsites.net/player/1036762440?region=IND"
 ```
@@ -96,9 +96,10 @@ curl "https://your-gateway.azurewebsites.net/player/1036762440?region=IND"
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `FF_GUEST_UID` | ✅ | — | Garena guest account UID |
-| `FF_GUEST_PASSWORD` | ✅ | — | Garena guest account password |
-| `FF_GUEST_TOKEN` | ❌ | — | Static JWT override (skips login) |
+| `FF_SESSION_JWT` | One of these sources required | — | Authorized Garena session JWT |
+| `FF_TOKEN_PROVIDER_URL` | Optional | — | Trusted HTTPS endpoint returning `{ "token": "..." }` |
+| `FF_TOKEN_PROVIDER_SECRET` | With provider URL | — | Bearer credential for the token provider |
+| `FF_TOKEN_UPDATE_KEY` | For token updates | — | Shared secret required by `POST /token/update` |
 | `FF_OB_VERSION` | ❌ | `OB55` | Garena release version header |
 | `AES_KEY` | ❌ | `Yg&tc%DEuh6%Zc^8` | AES-128-CBC key (16 bytes) |
 | `AES_IV` | ❌ | `6oyZDr22E3ychjM%` | AES-128-CBC IV (16 bytes) |
@@ -126,7 +127,7 @@ source .venv/bin/activate         # Windows: .venv\Scripts\activate
 pip install -r requirements.txt -r requirements-dev.txt
 
 cp .env.example .env
-# Edit .env with your FF_GUEST_UID and FF_GUEST_PASSWORD
+# Configure an authorized FF_SESSION_JWT or trusted HTTPS token provider.
 
 python src/app.py
 # OR via gunicorn:
@@ -174,7 +175,7 @@ pytest tests/ --cov=src --cov-report=term-missing -v
 
 | Symptom | Likely Cause | Fix |
 |---|---|---|
-| `401 Unauthorized` from Garena | JWT expired | Check `/health` → `token_expires_in_seconds`. Gateway auto-refreshes. If `0`, check `FF_GUEST_UID`/`FF_GUEST_PASSWORD`. |
+| `401 Unauthorized` from Garena | JWT expired/revoked | Check `/health` → `token_expires_in_seconds`; configure a valid authorized session source. |
 | `400 Bad Request` from Garena | Wrong OB version | Update `FF_OB_VERSION` env var |
 | `503 Service Unavailable` | Circuit breaker open | Check `/health` → `circuit_breakers`. Wait 60s or restart. |
 | `/health` shows `degraded` | Token refresh failed 3x | Check logs for auth errors. Verify guest credentials. |

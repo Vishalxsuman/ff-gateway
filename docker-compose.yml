@@ -11,9 +11,11 @@ services:
     ports:
       - "${PORT:-8000}:${PORT:-8000}"
     environment:
-      # ── Required ────────────────────────────────────────────
-      FF_GUEST_UID: "${FF_GUEST_UID}"
-      FF_GUEST_PASSWORD: "${FF_GUEST_PASSWORD}"
+      # ── Authorized session source ──────────────────────────
+      FF_SESSION_JWT: "${FF_SESSION_JWT:-}"
+      FF_TOKEN_PROVIDER_URL: "${FF_TOKEN_PROVIDER_URL:-}"
+      FF_TOKEN_PROVIDER_SECRET: "${FF_TOKEN_PROVIDER_SECRET:-}"
+      FF_TOKEN_UPDATE_KEY: "${FF_TOKEN_UPDATE_KEY:-}"
       # ── Protocol ────────────────────────────────────────────
       FF_OB_VERSION: "${FF_OB_VERSION:-OB55}"
       FF_FULL_BUILD_STRING: "${FF_FULL_BUILD_STRING:-}"

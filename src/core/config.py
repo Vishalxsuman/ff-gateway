@@ -12,10 +12,6 @@ from typing import Optional
 
 @dataclass(frozen=True)
 class GatewayConfig:
-    # ── Auth ──────────────────────────────────────────────────────────────────
-    ff_guest_uid: str
-    ff_guest_password: str
-
     # ── Protocol ──────────────────────────────────────────────────────────────
     ff_ob_version: str
     ff_full_build_string: str
@@ -89,9 +85,6 @@ def _optional(key: str, default: str = "") -> str:
 
 def load_config() -> GatewayConfig:
     """Load and validate configuration from environment variables."""
-    ff_guest_uid = _require("FF_GUEST_UID")
-    ff_guest_password = _require("FF_GUEST_PASSWORD")
-
     aes_key_str = _optional("AES_KEY", "Yg&tc%DEuh6%Zc^8")
     aes_iv_str = _optional("AES_IV", "6oyZDr22E3ychjM%")
 
@@ -103,8 +96,6 @@ def load_config() -> GatewayConfig:
         sys.exit(1)
 
     return GatewayConfig(
-        ff_guest_uid=ff_guest_uid,
-        ff_guest_password=ff_guest_password,
         ff_ob_version=_optional("FF_OB_VERSION", "OB55"),
         ff_full_build_string=_optional(
             "FF_FULL_BUILD_STRING",
